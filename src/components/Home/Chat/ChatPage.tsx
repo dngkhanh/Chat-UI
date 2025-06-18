@@ -11,6 +11,11 @@ import { FriendList } from './FriendList/FriendList';
 import { ConversationProvider, useConversation } from "../../../hook/ConversationContext";
 import { CallProvider } from "../../../hook/CallContext";
 import { getConversationById } from "../../../api/Chat.api";
+import socketService from "../../../socket/Socket";
+import user from "../../../components/store/accountContext";
+import Call from './Call/Call';
+import { useSocket } from '../../../contexts/SocketContext';
+import { useAuth } from '../../../contexts/AuthContext';
 
 // Component con để xử lý logic với context
 function ChatContent() {
@@ -22,6 +27,9 @@ function ChatContent() {
   } | null>(null);
   const [isChatInfoOpen, setIsChatInfoOpen] = useState(false);
   const [isVideoCall, setIsVideoCall] = useState(false);
+  const [isVoiceCall, setIsVoiceCall] = useState(false);
+  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'incoming' | 'connected' | 'ended'>('idle');
+  const [callTarget, setCallTarget] = useState<any>(null);
   const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
   const headerDropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -65,7 +73,7 @@ function ChatContent() {
           setSelectedChat({
             id: conversationId,
             name: conversationData.data.title,
-            avatar: "https://i.pravatar.cc/150?img=1", // Avatar mặc định cho group
+            avatar: "/user/friend.png", // Avatar mặc định cho group
             type: "GROUP"
           });
         } else {
@@ -78,7 +86,7 @@ function ChatContent() {
             setSelectedChat({
               id: conversationId,
               name: `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`,
-              avatar: otherParticipant.user.avatarUrl || "https://i.pravatar.cc/150?img=1",
+              avatar: otherParticipant.user.avatarUrl || otherParticipant.user.avatar || "/user/friend.png",
               type: "FRIEND"
             });
           }
@@ -96,7 +104,67 @@ function ChatContent() {
   };
 
   const handleVoiceCall = () => {
-    console.log('Voice call clicked');
+    console.log('handleVoiceCall called!');
+    console.log('selectedChat:', selectedChat);
+    console.log('socketService status:', socketService?.status());
+    
+    if (!selectedChat) return;
+    
+    // Bắt đầu cuộc gọi thoại
+    setCallTarget(selectedChat);
+    setCallStatus('calling');
+    setIsVoiceCall(true);
+    
+    // Gửi tín hiệu gọi qua socket
+    if (socketService) {
+      console.log('Emitting callUser:', {
+        conversationId: selectedChat.id,
+        callType: 'VOICE',
+        user: {
+          id: user.id,
+          first_name: userInfo.name.split(' ')[0] || userInfo.name,
+          last_name: userInfo.name.split(' ').slice(1).join(' ') || '',
+          email: user.email
+        },
+        callerInfomation: {
+          id: user.id,
+          first_name: userInfo.name.split(' ')[0] || userInfo.name,
+          last_name: userInfo.name.split(' ').slice(1).join(' ') || '',
+          email: user.email
+        }
+      });
+      
+      socketService.emit('callUser', {
+        conversationId: selectedChat.id,
+        callType: 'VOICE',
+        user: {
+          id: user.id,
+          first_name: userInfo.name.split(' ')[0] || userInfo.name,
+          last_name: userInfo.name.split(' ').slice(1).join(' ') || '',
+          email: user.email
+        },
+        callerInfomation: {
+          id: user.id,
+          first_name: userInfo.name.split(' ')[0] || userInfo.name,
+          last_name: userInfo.name.split(' ').slice(1).join(' ') || '',
+          email: user.email
+        }
+      });
+      
+      // Lưu tin nhắn cuộc gọi vào database
+      socketService.emit('sendMessage', {
+        conversationId: selectedChat.id,
+        messageType: 'CALL',
+        callType: 'VOICE',
+        callStatus: 'INVITED',
+        content: 'Cuộc gọi thoại',
+        timestamp: new Date()
+      });
+      
+      // Thêm emit tới conversation để đảm bảo user khác nhận được
+      socketService.emit('joinConversation', { conversationId: selectedChat.id });
+    }
+    
     setIsHeaderDropdownOpen(false);
   };
 
@@ -134,7 +202,7 @@ function ChatContent() {
     setSelectedChat({
       id: parseInt(conversationId),
       name: `${friend.firstName} ${friend.lastName}`,
-      avatar: friend.avatarUrl || friend.avatar || "https://i.pravatar.cc/150?img=1",
+      avatar: friend.avatarUrl || friend.avatar || "/user/friend.png",
       type: "FRIEND"
     });
     
@@ -155,7 +223,7 @@ function ChatContent() {
     setSelectedChat({
       id: parseInt(conversationId),
       name: `Nhóm ${friends.length + 1} người`,
-      avatar: "https://i.pravatar.cc/150?img=1", // Avatar mặc định cho group
+      avatar: "/user/friend.png", // Avatar mặc định cho group
       type: "GROUP"
     });
     
@@ -173,6 +241,156 @@ function ChatContent() {
   const handleMyStories = () => {
     console.log('My Stories clicked');
     setIsHeaderDropdownOpen(false);
+  };
+
+  // Xử lý các sự kiện call từ socket
+  useEffect(() => {
+    if (!socketService) return;
+    
+    console.log('Setting up call event listeners...');
+    
+    // Lắng nghe cuộc gọi đến
+    socketService.listen('openCall', (data: any) => {
+      console.log('Received openCall:', data);
+      setCallTarget(data.callerInfomation);
+      setCallStatus('incoming');
+      setIsVoiceCall(true);
+    });
+    
+    // Lắng nghe cuộc gọi được chấp nhận
+    socketService.listen('callAccepted', (data: any) => {
+      console.log('Call accepted:', data);
+      setCallStatus('connected');
+    });
+    
+    // Lắng nghe cuộc gọi bị từ chối
+    socketService.listen('refuseCall', (data: any) => {
+      console.log('Call refused:', data);
+      setCallStatus('ended');
+      setTimeout(() => {
+        setIsVoiceCall(false);
+        setCallStatus('idle');
+      }, 2000);
+    });
+    
+    // Lắng nghe cuộc gọi kết thúc
+    socketService.listen('closeCall', (data: any) => {
+      console.log('Call closed:', data);
+      setCallStatus('ended');
+      setTimeout(() => {
+        setIsVoiceCall(false);
+        setCallStatus('idle');
+      }, 2000);
+    });
+    
+    // Lắng nghe cuộc gọi bị từ bỏ
+    socketService.listen('giveUpCall', (data: any) => {
+      console.log('Call given up:', data);
+      setCallStatus('ended');
+      setTimeout(() => {
+        setIsVoiceCall(false);
+        setCallStatus('idle');
+      }, 2000);
+    });
+    
+    // Lắng nghe lỗi cuộc gọi
+    socketService.listen('callError', (data: any) => {
+      console.log('Call error:', data);
+      setCallStatus('ended');
+      setTimeout(() => {
+        setIsVoiceCall(false);
+        setCallStatus('idle');
+      }, 2000);
+    });
+    
+    // Lắng nghe sự kiện join conversation để đảm bảo kết nối
+    socketService.listen('userJoinedConversation', (data: any) => {
+      console.log('User joined conversation:', data);
+    });
+    
+    return () => {
+      socketService.offListener('openCall');
+      socketService.offListener('callAccepted');
+      socketService.offListener('refuseCall');
+      socketService.offListener('closeCall');
+      socketService.offListener('giveUpCall');
+      socketService.offListener('callError');
+      socketService.offListener('userJoinedConversation');
+    };
+  }, [socketService]);
+  
+  // Hàm xử lý chấp nhận cuộc gọi
+  const handleAcceptCall = () => {
+    if (socketService && callTarget) {
+      socketService.emit('answerCall', {
+        conversationId: selectedChat?.id,
+        callType: 'VOICE'
+      });
+      
+      // Cập nhật trạng thái cuộc gọi thành ONGOING
+      socketService.emit('sendMessage', {
+        conversationId: selectedChat?.id,
+        messageType: 'CALL',
+        callType: 'VOICE',
+        callStatus: 'ONGOING',
+        content: 'Cuộc gọi đã được chấp nhận',
+        timestamp: new Date()
+      });
+      
+      setCallStatus('connected');
+    }
+  };
+  
+  // Hàm xử lý từ chối cuộc gọi
+  const handleRejectCall = () => {
+    if (socketService && callTarget) {
+      socketService.emit('refuseCall', {
+        conversationId: selectedChat?.id,
+        callType: 'VOICE'
+      });
+      
+      // Cập nhật trạng thái cuộc gọi thành MISSED
+      socketService.emit('sendMessage', {
+        conversationId: selectedChat?.id,
+        messageType: 'CALL',
+        callType: 'VOICE',
+        callStatus: 'MISSED',
+        content: 'Cuộc gọi bị từ chối',
+        timestamp: new Date()
+      });
+      
+      setCallStatus('ended');
+      setTimeout(() => {
+        setIsVoiceCall(false);
+        setCallStatus('idle');
+      }, 2000);
+    }
+  };
+  
+  // Hàm xử lý kết thúc cuộc gọi
+  const handleEndCall = () => {
+    if (socketService && callTarget) {
+      socketService.emit('closeCall', {
+        conversationId: selectedChat?.id,
+        callType: 'VOICE'
+      });
+      
+      // Cập nhật trạng thái cuộc gọi thành ENDED
+      socketService.emit('sendMessage', {
+        conversationId: selectedChat?.id,
+        messageType: 'CALL',
+        callType: 'VOICE',
+        callStatus: 'ENDED',
+        content: 'Cuộc gọi đã kết thúc',
+        timestamp: new Date()
+      });
+      
+      setCallStatus('ended');
+      setTimeout(() => {
+        setIsVoiceCall(false);
+        setCallStatus('idle');
+      }, 2000);
+    }
   };
 
   useEffect(() => {
@@ -243,46 +461,48 @@ function ChatContent() {
                   : (isChatInfoOpen ? 'calc(100% - 600px)' : 'calc(100% - 300px)')
         }}
       >
-        <div className="header">
-          <div 
-            className="chat-info"
-            onClick={handleOpenChatInfo}
-            style={{ cursor: selectedChat ? 'pointer' : 'default' }}
-          >
-            <div className="avatar">
-              <img src={selectedChat?.avatar || "https://i.pravatar.cc/150?img=1"} alt="avatar" />
+        {selectedChat && (
+          <div className="header">
+            <div 
+              className="chat-info"
+              onClick={handleOpenChatInfo}
+              style={{ cursor: selectedChat ? 'pointer' : 'default' }}
+            >
+              <div className="avatar">
+                <img src={selectedChat?.avatar || "/user/friend.png"} alt="avatar" />
+              </div>
+              <div className="info">
+                <div className="name">{selectedChat?.name || "Chọn một cuộc trò chuyện"}</div>
+                <div className="status">{selectedChat ? "Online" : ""}</div>
+              </div>
             </div>
-            <div className="info">
-              <div className="name">{selectedChat?.name || "Chọn một cuộc trò chuyện"}</div>
-              <div className="status">{selectedChat ? "Online" : ""}</div>
-            </div>
-          </div>
-          <div className="actions">
-            <button onClick={handleSearch} disabled={!selectedChat}>
-              <FiSearch />
-            </button>
-            <button onClick={handleVoiceCall} disabled={!selectedChat}>
-              <FiPhone />
-            </button>
-            <button onClick={handleVideoCall} disabled={!selectedChat}>
-              <FiVideo />
-            </button>
-            <div className="more-options-header" ref={headerDropdownRef}>
-              <button onClick={handleToggleHeaderDropdown} disabled={!selectedChat}>
-                <FiMoreVertical />
+            <div className="actions">
+              <button onClick={handleSearch} disabled={!selectedChat}>
+                <FiSearch />
               </button>
-              {isHeaderDropdownOpen && selectedChat && (
-                <div className="dropdown-menu-header">
-                  <ul>
-                    <li onClick={handleOpenChatInfo}>Xem thông tin chat</li>
-                    <li>Tùy chọn khác 1</li>
-                    <li>Tùy chọn khác 2</li>
-                  </ul>
-                </div>
-              )}
+              <button onClick={handleVoiceCall} disabled={!selectedChat}>
+                <FiPhone />
+              </button>
+              <button onClick={handleVideoCall} disabled={!selectedChat}>
+                <FiVideo />
+              </button>
+              <div className="more-options-header" ref={headerDropdownRef}>
+                <button onClick={handleToggleHeaderDropdown} disabled={!selectedChat}>
+                  <FiMoreVertical />
+                </button>
+                {isHeaderDropdownOpen && selectedChat && (
+                  <div className="dropdown-menu-header">
+                    <ul>
+                      <li onClick={handleOpenChatInfo}>Xem thông tin chat</li>
+                      <li>Tùy chọn khác 1</li>
+                      <li>Tùy chọn khác 2</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="messages-container">
           {selectedChat ? (
             <ChatBox />
@@ -306,6 +526,21 @@ function ChatContent() {
       />
       {isVideoCall && (
         <VideoCall onClose={() => setIsVideoCall(false)} />
+      )}
+      {isVoiceCall && (
+        <Call 
+          isOpen={isVoiceCall}
+          callType="voice"
+          callStatus={callStatus}
+          callTarget={callTarget}
+          onAccept={handleAcceptCall}
+          onReject={handleRejectCall}
+          onEnd={handleEndCall}
+          onClose={() => {
+            setIsVoiceCall(false);
+            setCallStatus('idle');
+          }}
+        />
       )}
     </div>
   );

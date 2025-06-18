@@ -250,14 +250,17 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [newName, setNewName] = useState(props.userInfo?.name || "");
-  const [newAvatar, setNewAvatar] = useState(props.userInfo?.avatar || "");
+  const [newAvatar, setNewAvatar] = useState("/user/friend.png");
+  const [newPhone, setNewPhone] = useState("");
   const [showGeneralSettings, setShowGeneralSettings] = useState(false);
   const [userInfo, setUserInfo] = useState<{
     name: string;
     avatar: string;
+    phone: string;
   }>({
     name: "",
     avatar: "",
+    phone: "",
   });
 
   // New Message and New Group states
@@ -265,6 +268,9 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
   const [showNewGroupView, setShowNewGroupView] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // 1. Thêm ref cho input file
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Lấy user ID từ JWT token để đảm bảo tính nhất quán
   const getCurrentUserId = () => {
@@ -278,6 +284,33 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
       console.error('Error decoding token:', error);
       return user.id;
     }
+  };
+
+  // Hàm xử lý hiển thị nội dung tin nhắn cuối cùng
+  const getLastMessageContent = (lastMessage: any) => {
+    if (!lastMessage) return '';
+    
+    // Nếu là tin nhắn cuộc gọi
+    if (lastMessage.message_type === 'CALL') {
+      const callType = lastMessage.call_type === 'VIDEO' ? 'Video' : 'Thoại';
+      const callStatus = lastMessage.call_status;
+      
+      switch (callStatus) {
+        case 'INVITED':
+          return `📞 Cuộc gọi ${callType} đến`;
+        case 'MISSED':
+          return `📞 Cuộc gọi ${callType} nhỡ`;
+        case 'ONGOING':
+          return `📞 Cuộc gọi ${callType} đang diễn ra`;
+        case 'ENDED':
+          return `📞 Cuộc gọi ${callType} đã kết thúc`;
+        default:
+          return `📞 Cuộc gọi ${callType}`;
+      }
+    }
+    
+    // Nếu là tin nhắn thường
+    return lastMessage.content || '';
   };
 
   // Fetch user info from API
@@ -295,6 +328,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
           setUserInfo({
             name: `${data.data.firstName || ''} ${data.data.lastName || ''}`.trim(),
             avatar: data.data.avatar || data.data.avatarUrl || 'https://i.pravatar.cc/150?img=1',
+            phone: data.data.phone || '+84 123 456 789',
           });
         }
       })
@@ -369,8 +403,8 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
             return {
               id: item.id.toString(),
               name: displayName,
-              image: item.avatarUrl || item.avatar || 'https://i.pravatar.cc/150?img=1',
-              content: item.lastMessage?.content || '',
+              image: '/user/friend.png',
+              content: getLastMessageContent(item.lastMessage),
               msgTime: item.lastMessage?.createdAt || item.updatedAt || '',
             };
           });
@@ -497,6 +531,12 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Cập nhật newName và newPhone khi userInfo thay đổi
+  useEffect(() => {
+    setNewName(userInfo.name);
+    setNewPhone(userInfo.phone);
+  }, [userInfo]);
 
   if (!context) return null;
 
@@ -681,11 +721,63 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
     setShowSettings(true);
   };
 
-  const handleSaveProfile = () => {
-    // TODO: Implement save profile logic
-    console.log("Save profile:", { newName, newAvatar });
-    setShowEditProfile(false);
-    setShowSettings(true);
+  // 2. Hàm xử lý chọn ảnh
+  const handleAvatarClick = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Nếu có API upload, gọi API ở đây, lấy url trả về setNewAvatar
+      // Nếu chỉ preview local:
+      setNewAvatar(URL.createObjectURL(file));
+      // Có thể lưu file vào state để upload khi nhấn Save
+      setSelectedAvatarFile(file);
+    }
+  };
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+
+  // 4. Khi nhấn Save, nếu có selectedAvatarFile thì upload lên server trước, lấy url rồi gửi cùng tên/sđt
+  const handleSaveProfile = async () => {
+    let avatarUrl = newAvatar;
+    if (selectedAvatarFile) {
+      // Nếu có API upload, upload file lên server, lấy url trả về
+      const formData = new FormData();
+      formData.append('avatar', selectedAvatarFile);
+      let res: Response;
+      try {
+        res = await fetch(`http://localhost:8080/users/${user.id}/avatar`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data: any = await res.json();
+        if (data.statusCode === 200 && data.data?.avatarUrl) {
+          avatarUrl = data.data.avatarUrl;
+        }
+      } catch (err) {
+        console.error('Lỗi upload avatar:', err);
+      }
+    }
+    // Gửi cập nhật profile
+    try {
+      await fetch(`http://localhost:8080/users/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newName,
+          phone: newPhone,
+          avatar: avatarUrl,
+        }),
+      });
+      setShowEditProfile(false);
+      setShowSettings(true);
+    } catch (err) {
+      console.error('Lỗi cập nhật profile:', err);
+    }
   };
 
   const handleGeneralSettingsClick = () => {
@@ -763,12 +855,19 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
         </div>
         <div className="edit-profile-content">
           <div className="avatar-section">
-            <div className="avatar-container">
+            <div className="avatar-container" onClick={handleAvatarClick} style={{ cursor: 'pointer' }}>
               <img src={newAvatar} alt={newName} />
               <div className="avatar-overlay">
                 <FiCamera />
                 <span>Change Photo</span>
               </div>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={handleAvatarChange}
+              />
             </div>
           </div>
           <div className="form-section">
@@ -779,6 +878,15 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Enter your name"
+              />
+            </div>
+            <div className="form-group">
+              <label>Phone</label>
+              <input
+                type="text"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="Enter your phone number"
               />
             </div>
           </div>
@@ -887,7 +995,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
         <div className="settings-content">
           <div className="settings-section account-section">
             <div className="user-avatar-large">
-              <img src={userInfo.avatar} alt={userInfo.name} />
+              <img src={'/user/friend.png'} alt={userInfo.name} />
               <div className="user-status">
                 <h3>{userInfo.name}</h3>
                 <span>online</span>
@@ -896,7 +1004,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
             <div className="phone-section">
               <FiPhone className="icon" />
               <div className="phone-info">
-                <span>+84 123 456 789</span>
+                <span>{userInfo.phone}</span>
                 <span className="phone-label">Phone</span>
               </div>
             </div>
@@ -952,7 +1060,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
                 {userInfo && (
                   <div className="user-profile" onClick={handleSettingsClick}>
                     <div className="user-avatar">
-                      <img src={userInfo.avatar} alt={userInfo.name} />
+                      <img src={'/user/friend.png'} alt={userInfo.name} />
                     </div>
                     <div className="user-info">
                       <h4>{userInfo.name}</h4>
@@ -1020,7 +1128,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
                 {userInfo && (
                   <div className="user-profile" onClick={handleSettingsClick}>
                     <div className="user-avatar">
-                      <img src={userInfo.avatar} alt={userInfo.name} />
+                      <img src={userInfo.avatar || '/user/friend.png'} alt={userInfo.name} />
                     </div>
                     <div className="user-info">
                       <h4>{userInfo.name}</h4>
@@ -1086,7 +1194,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
               {userInfo && (
                 <div className="user-profile" onClick={handleSettingsClick}>
                   <div className="user-avatar">
-                    <img src={userInfo.avatar} alt={userInfo.name} />
+                    <img src={userInfo.avatar || '/user/friend.png'} alt={userInfo.name} />
                   </div>
                   <div className="user-info">
                     <h4>{userInfo.name}</h4>
@@ -1152,7 +1260,11 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
               onClick={() => handleChatClick(item.id)}
             >
               <div className="recent-item__avatar">
-                <img src={item.image} alt={item.name} />
+                <img
+                  src={item.image ? item.image : '/user/friend.png'}
+                  alt={item.name || 'avatar'}
+                  className="chat-recent__avatar"
+                />
                 {listOnline.includes(item.id) && (
                   <span className="online-indicator"></span>
                 )}

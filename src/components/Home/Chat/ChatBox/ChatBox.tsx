@@ -143,6 +143,7 @@ export interface MessageDto {
   timestamp?: Date;
   attachments?: Attachment[];
   user?: Account;
+  createdAt?: Date;
 }
 
 export interface CallDto extends MessageDto {
@@ -173,6 +174,20 @@ const getOtherInfo = (
       name: "All",
       image: "",
       type: ConversationType.FRIEND,
+      phoneNumber: undefined,
+      email: undefined,
+    };
+  }
+
+  // Nếu là group chat (nhiều hơn 2 participants), luôn lấy tên nhóm
+  if (conversation.participants && conversation.participants.length > 2) {
+    return {
+      name: conversation.title,
+      image:
+        conversation.participants[0]?.user.avatarUrl ||
+        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRg2EeQe-qNJinTWuKmUVZwpQnXkt6DudNoBQ&s",
+      type: ConversationType.GROUP,
+      participants: conversation.participants,
       phoneNumber: undefined,
       email: undefined,
     };
@@ -280,6 +295,8 @@ export function ChatBox(/*{ isChatInfoOpen, setIsChatInfoOpen }: ChatBoxProps*/)
   const [resetCall, setResetCall] = useState<boolean>(true);
   const [isSending, setIsSending] = useState<boolean>(false);
   const [messages, setMessages] = useState<MessageDto[]>([]);
+  // Thêm biến tạm để lưu tin nhắn vừa gửi local
+  const lastSentMessageRef = useRef<{content: string, createdAt: number} | null>(null);
 
   // Update conversation when isLoad changes
   useEffect(() => {
@@ -441,11 +458,16 @@ export function ChatBox(/*{ isChatInfoOpen, setIsChatInfoOpen }: ChatBoxProps*/)
     const old: JSX.Element[] = [];
     chatsFriendRecent.forEach((msg, index) => {
       if (conversationId) {
-      old.push(<InsertMessage key={msg.id || `msg-${index}-${Date.now()}`} props={[msg, conversationId]} />);
+        // Nếu thiếu conversationType, gán thủ công từ conversationInfo
+        const msgWithType = {
+          ...msg,
+          conversationType: msg.conversationType ?? conversationInfo?.type
+        };
+        old.push(<InsertMessage key={msg.id || `msg-${index}-${Date.now()}`} props={[msgWithType, conversationId]} />);
       }
     });
     setMessageRecent(old);
-  }, [chatsFriendRecent, conversationId]);
+  }, [chatsFriendRecent, conversationId, conversationInfo]);
 
   // Function to sanitize input
   const sanitizeInput = (input: string): string => {
@@ -533,18 +555,28 @@ export function ChatBox(/*{ isChatInfoOpen, setIsChatInfoOpen }: ChatBoxProps*/)
 
     const sanitizedMessage = sanitizeInput(message);
 
-      const msg: MessageDto = {
-        conversationId: conversationId,
-        conversationType: conversationInfo?.type,
-        messageType: MessageType.text,
+    const now = new Date();
+    const msg: MessageDto = {
+      conversationId: conversationId,
+      conversationType: conversationInfo?.type,
+      messageType: MessageType.text,
       content: sanitizedMessage,
-      };
+      user: user,
+      createdAt: now,
+      timestamp: now,
+    };
 
-      console.log('Sending message:', msg);
-    
+    // Lưu lại thông tin tin nhắn local vừa gửi
+    lastSentMessageRef.current = { content: sanitizedMessage, createdAt: now.getTime() };
+
+    // Hiển thị ngay lập tức trên UI, luôn truyền conversationType
+    setMessageRecent((prev) => [
+      ...prev,
+      <InsertMessage key={`local-msg-${now.getTime()}`} props={[{...msg, conversationType: conversationInfo?.type}, conversationId]} />,
+    ]);
+
     try {
       socketService.emit("sendMessage", msg);
-      console.log('Message sent');
       setAutoScroll(true);
       if (inputRef.current) inputRef.current.focus();
     } catch (error) {
@@ -586,6 +618,17 @@ export function ChatBox(/*{ isChatInfoOpen, setIsChatInfoOpen }: ChatBoxProps*/)
   };
 
   const handleComingMessage = (msg: any) => {
+    // Nếu là tin nhắn của chính mình vừa gửi (so sánh content và thời gian gửi gần nhau), thì bỏ qua không thêm lại
+    if (
+      msg.user?.id === user.id &&
+      lastSentMessageRef.current &&
+      msg.content === lastSentMessageRef.current.content &&
+      Math.abs(new Date(msg.createdAt || msg.timestamp).getTime() - lastSentMessageRef.current.createdAt) < 5000 // 5s
+    ) {
+      // Reset lại ref để không bỏ qua các tin tiếp theo
+      lastSentMessageRef.current = null;
+      return;
+    }
     console.log('Received message:', msg);
     const tmp = user;
     console.log("xxxxxxxxxxxx " + tmp);
@@ -780,37 +823,50 @@ export function ChatBox(/*{ isChatInfoOpen, setIsChatInfoOpen }: ChatBoxProps*/)
 
   return (
     <div className="chat-box">
-      <div className="chat-box__main">
-        <div 
-          id="messages" 
-          className="chat-box__messages"
-          onScroll={overScroll}
-        >
-          {showLoad && <div className="loading">Loading...</div>}
-          {messageRecent}
+      {/* Nếu chưa chọn đoạn chat nào thì hiển thị no-chat-selected */}
+      {!conversationId ? (
+        <div className="no-chat-selected" style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#888'}}>
+          <img src="/user/group.jpg" alt="No chat selected" style={{width: 120, opacity: 0.5, marginBottom: 24}} />
+          <h2>Chưa chọn cuộc trò chuyện</h2>
+          <p>Hãy chọn một đoạn chat để bắt đầu nhắn tin!</p>
         </div>
+      ) : (
+        <>
+          {/* Phần header chat (nếu có) */}
+          {/* Nếu bạn có header riêng, render ở đây */}
+          <div className="chat-box__main">
+            <div 
+              id="messages" 
+              className="chat-box__messages"
+              onScroll={overScroll}
+            >
+              {showLoad && <div className="loading">Loading...</div>}
+              {messageRecent}
+            </div>
 
-        {isChatInfoOpen && (
-          <ChatInfo 
-            isOpen={isChatInfoOpen}
-            onClose={() => setIsChatInfoOpen(false)}
-            chatInfo={{
-              id: conversationId || 0,
-              name: otherInfo.name,
-              avatar: otherInfo.image,
-              type: ConversationType[otherInfo.type] as keyof typeof ConversationType,
-              participants: otherInfo.participants,
-              email: otherInfo.email,
-              phoneNumber: otherInfo.phoneNumber,
-            }}
+            {isChatInfoOpen && (
+              <ChatInfo 
+                isOpen={isChatInfoOpen}
+                onClose={() => setIsChatInfoOpen(false)}
+                chatInfo={{
+                  id: conversationId || 0,
+                  name: otherInfo.name,
+                  avatar: otherInfo.image,
+                  type: ConversationType[otherInfo.type] as keyof typeof ConversationType,
+                  participants: otherInfo.participants,
+                  email: otherInfo.email,
+                  phoneNumber: otherInfo.phoneNumber,
+                }}
+              />
+            )}
+          </div>
+
+          <ChatForm 
+            onSubmit={onSubmit}
+            isChatInfoOpen={isChatInfoOpen}
           />
-        )}
-      </div>
-
-      <ChatForm 
-        onSubmit={onSubmit}
-        isChatInfoOpen={isChatInfoOpen}
-      />
+        </>
+      )}
     </div>
   );
 }

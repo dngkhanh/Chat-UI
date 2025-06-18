@@ -460,6 +460,8 @@
             box-sizing: border-box;
             position: relative;
             z-index: 10;
+            min-width: 0;
+            flex-shrink: 0;
 
             .chat-info {
                 display: flex;
@@ -467,6 +469,8 @@
                 gap: 12px;
                 flex-direction: row;
                 cursor: pointer;
+                min-width: 0;
+                flex: 1;
 
                 .avatar {
                     width: 40px;
@@ -475,6 +479,7 @@
                     overflow: hidden;
                     border: 2px solid rgba(0, 0, 0, 0.06);
                     transition: all 0.3s ease;
+                    flex-shrink: 0;
 
                     &:hover {
                         transform: scale(1.05);
@@ -488,6 +493,9 @@
                 }
 
                 .info {
+                    min-width: 0;
+                    flex: 1;
+
                     .name {
                         font-weight: 600;
                         color: #1a1a1a;
@@ -495,6 +503,9 @@
                         margin-bottom: 2px;
                         cursor: pointer;
                         transition: color 0.3s ease;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
 
                         &:hover {
                             color: #1976d2;
@@ -507,6 +518,7 @@
                         display: flex;
                         align-items: center;
                         gap: 6px;
+                        white-space: nowrap;
 
                         &::before {
                             content: '';
@@ -524,6 +536,8 @@
             .actions {
                 display: flex;
                 gap: 12px;
+                flex-shrink: 0;
+                min-width: 0;
 
                 button {
                     background: transparent;
@@ -537,6 +551,9 @@
                     justify-content: center;
                     transition: all 0.3s ease;
                     border-radius: 50%;
+                    flex-shrink: 0;
+                    min-width: 36px;
+                    height: 36px;
 
                     &:hover {
                         background: rgba(0, 0, 0, 0.05);
@@ -559,6 +576,7 @@
 
                 .more-options-header {
                     position: relative;
+                    flex-shrink: 0;
                 }
 
                 .dropdown-menu-header {

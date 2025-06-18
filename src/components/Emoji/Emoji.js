@@ -23,17 +23,19 @@ export default function Emoji(props) {
     return (
         <div className='emoji'>
             <div className="picker">
-                {chosenEmoji ? (
-                    <span>
-                        <img
-                            style={{ width: "15px" }}
-                            src={chosenEmoji.target.src}
-                        />
-                    </span>
-                ) : (
-                    <span>No Emoji</span>
-                )}
-                <Picker onEmojiClick={onEmojiClick} />
+                <Picker
+                    onEmojiClick={onEmojiClick}
+                    theme="light"
+                    searchDisabled={false}
+                    skinTonesDisabled={false}
+                    previewConfig={{ showPreview: false }}
+                    width={340}
+                    height={400}
+                    lazyLoadEmojis={true}
+                    emojiStyle="apple"
+                    autoFocusSearch={false}
+                    suggestedEmojisMode="recent"
+                />
             </div>
         </div>
     );
