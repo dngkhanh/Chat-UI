@@ -1,0 +1,107 @@
+// import React, { useRef, useState } from "react";
+// import { token } from "../../../store/tokenContext";
+// import useSocket from "../../../store/socket";
+// import {
+//   CallStatus,
+//   CallType,
+//   ConversationType,
+//   MessageDto,
+//   MessageStatus,
+//   MessageType,
+//   TargetType,
+// } from "../ChatBox";
+
+// const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "svg"];
+
+
+// interface InsertMessageProps {
+//   props: [MessageDto, string, string];
+// }
+// export function InsertMessage({ props }: InsertMessageProps) {
+
+//   const socket: any = useSocket;
+//   const [msg, userId, conversationId] = props;
+//   const [showOption, setShowOption] = useState(false);
+//   const [showDate, setShowDate] = useState(false);
+//   const content = (msg.content || "").split(" ");
+//   const contentRef = useRef<HTMLDivElement>(null);
+
+//   const onMouse = () => {
+//     setShowOption(!showOption);
+//   };
+
+//   const isDelete = () => {
+//     if (window.confirm("Are you sure you want to delete this message?")) {
+//       fetch(`http://localhost:8080/messages/${msg.guid}`, {
+//         method: "DELETE",
+//         headers: {
+//           Authorization: `Bearer ${token}`,
+//         },
+//       }).then(() => {
+//         socket.emit("delete_message", { conversationId });
+//         if (contentRef.current) {
+//           contentRef.current.innerHTML = "<b>MessageItem has been deleted</b>";
+//         }
+//         setShowOption(false);
+//       });
+//     }
+//   };
+
+//   const isSender = msg.conversationType === ConversationType.FRIEND;
+
+//   return (
+//     <div className={isSender ? "message-right" : "message-left"}>
+//       <div className="transparent"></div>
+//       <div className="message-wrap">
+//         {showOption && isSender ? (
+//           <div className="option-chat">
+//             <button onClick={isDelete}>Delete</button>
+//             <button onClick={() => setShowDate(!showDate)}>More</button>
+//           </div>
+//         ) : null}
+//         <div className="wrap-option">
+//           {!isSender && (
+//             <div className="user-coming">
+//               {msg.conversationType === ConversationType.GROUP ? "GROUP" : "Friend"}
+//             </div>
+//           )}
+//           <div className="user-content" onClick={onMouse}>
+//             <i className="message-content" ref={contentRef}>
+//               {content.map((item, index) => {
+//                 if (
+//                   imageExtensions.some((ext) => item.endsWith("." + ext)) ||
+//                   item.startsWith("data:image") ||
+//                   item.startsWith("https://")
+//                 ) {
+//                   return (
+//                     <a
+//                       key={index}
+//                       href={item}
+//                       target="_blank"
+//                       rel="noopener noreferrer"
+//                     >
+//                       <img src={item} alt="Shared content" />
+//                     </a>
+//                   );
+//                 }
+//                 return <span key={index}>{item} </span>;
+//               })}
+//             </i>
+//           </div>
+//           {showDate && (
+//             <div className="message-time">
+//               <i>{msg.timestamp?.toLocaleString()}</i>
+//             </div>
+//           )}
+//         </div>
+//         {showOption && !isSender ? (
+//           <div className="option-chat">
+//             <button onClick={() => setShowDate(!showDate)}>More</button>
+//           </div>
+//         ) : null}
+//       </div>
+//     </div>
+//   );
+// }
+
+// export default InsertMessage;

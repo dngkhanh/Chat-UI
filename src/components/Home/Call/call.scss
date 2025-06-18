@@ -1,0 +1,98 @@
+.call-page {
+    width: 100%;
+    .video-call {
+        width: 300px;
+        border-radius: 15px;
+        .button-call {
+            background: rgb(9, 171, 252);
+            overflow: hidden;
+            border-radius: 15px;
+            margin-bottom: 3px;
+            .call-from {
+                & {
+                    white-space: nowrap;
+                    animation: moveLeftToRight 4s linear infinite;
+                }
+                @keyframes moveLeftToRight {
+                    0% {
+                        transform: translateX(-100%); 
+                    }
+                    100% {
+                        transform: translateX(100%);
+                    }
+                }
+            }
+            button {
+                border: 5px solid rgb(228, 210, 6);
+                padding: 10px;
+                border-radius: 15px;
+                width: 45%;
+                margin: 1% 2.5%;
+                cursor: pointer;
+                
+            }
+            .call-ac {
+                font-weight: 700;
+                color: rgb(157, 162, 8);
+            }
+            button.give-up-call {
+                color: rgb(232, 63, 176);
+                background: white;
+                font-weight: 700;
+            }
+            button.start-call {
+                color: rgb(0, 179, 18);
+                background: white;
+                font-weight: 700;
+            }
+        }
+        .video-both {
+            display: flex;
+        }
+        .video-flex-column {
+            display: flex;
+            flex-direction: column;
+        }
+        .video-flex-row {
+            display: flex;
+            flex-direction: row;
+        }
+    }
+    .option-call {
+        width: 100%;
+        display: flex;
+        flex-direction: row;
+        justify-content: end;
+        position: fixed;
+        right: 0;
+        bottom: 10%;
+        &.option-column {
+            width: fit-content;
+            display: flex;
+            flex-direction: column;
+        }
+        button {
+            font-weight: 700;
+            border: none;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 15px;
+            cursor: pointer;
+            &:hover {
+                background: rgb(60, 60, 60);
+                color: white;
+            }
+            &.button-option {
+                background: black;
+                color: white;
+                border-radius: 100px;
+                font-weight: 800;
+                &:hover {
+                    background: white;
+                    color: rgb(226, 113, 0);
+                }
+            }
+            
+        }
+    }
+}

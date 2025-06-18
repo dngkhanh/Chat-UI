@@ -1,0 +1,287 @@
+// import React, {
+//   useContext,
+//   useEffect,
+//   useRef,
+//   useState,
+//   MouseEvent,
+// } from "react";
+// import "./ChatRecent.scss";
+// import { ChatContext } from "../Chat.js";
+// import { token } from "../../../store/tokenContext.js";
+// import useSocket from "../../../store/socket.js";
+
+// export interface User {
+//   id: number;
+//   first_name: string;
+//   last_name: string;
+//   email: string;
+//   is_active: boolean;
+//   avatar_url: string;
+// }
+
+// export interface Participant {
+//   id: number;
+//   conversation_id: number;
+//   user_id: number;
+//   type: string;
+//   created_at: string;
+//   updated_at: string;
+//   user: User;
+// }
+
+// export interface Message {
+//   id: number;
+//   guid: string;
+//   conversation_id: number;
+//   sender_id: number;
+//   message_type: string;
+//   content: string;
+//   created_at: string;
+//   deleted_at: string | null;
+//   call_type: string;
+//   callStatus: string;
+//   status: string;
+// }
+
+// export interface Conversation {
+//   id: number;
+//   title: string;
+//   creator_id: number;
+//   channel_id: number;
+//   created_at: string;
+//   updated_at: string;
+//   deleted_at: string | null;
+//   avatar_url: string;
+//   participants: Participant[];
+//   messages: Message[];
+// }
+
+// export interface ConversationsResponse {
+//   statusCode: number;
+//   message: string;
+//   data: {
+//     page: number;
+//     size: number;
+//     totalPage: number;
+//     totalElement: number;
+//     result: Conversation[];
+//   };
+// }
+
+// export interface ChatItem {
+//   id: number;
+//   image: string;
+//   name: string;
+//   msgTime?: string;
+//   content?: string;
+// }
+
+// export interface LastChat {
+//   msgTime: string;
+//   content: string;
+//   from: string;
+// }
+
+// export interface LastChatsResponse {
+//   data: [string[], LastChat[]];
+// }
+
+// export interface ChatRecentResponse {
+//   data: [ChatItem[], ChatItem[]];
+// }
+
+// export interface TypingEvent {
+//   otherId: string;
+// }
+
+// export interface ListOnlineEvent {
+//   listOnline: string[];
+// }
+
+// export function ChatsRecent() {
+//   const socket: any = useSocket;
+
+//   const context = useContext(ChatContext);
+//   if (!context) return null;
+
+//   const { isLoad, setIsLoad, isShowRecent, setIsShowRecent } = context;
+
+//   const [chatRecent, setChatRecent] = useState<ChatItem[]>([]);
+//   const [lastChatsId, setLastChatsId] = useState<string[]>([]);
+//   const [lastChatsObj, setLastChatsObj] = useState<LastChat[]>([]);
+//   const [userTyping, setUserTyping] = useState<string[]>([]);
+//   const [listOnline, setListOnline] = useState<string[]>([]);
+
+//   const itemRef = useRef<HTMLDivElement>(null);
+
+//   const onclick = (e: MouseEvent<HTMLDivElement>) => {
+//     const target = (e.target as HTMLElement).closest(
+//       ".recent-item"
+//     ) as HTMLElement | null;
+//     if (!target || !itemRef.current) return;
+
+//     const before = itemRef.current.getElementsByClassName("current-recent");
+//     if (before[0]) before[0].classList.remove("current-recent");
+//     target.classList.add("current-recent");
+
+//     setIsLoad(target.getAttribute("data-id") || "");
+//     // setIsShowRecent(false);
+//   };
+
+//   useEffect(() => {
+//     fetch(`http://localhost:8080/conversations?page=1&size=10`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`,
+//       },
+//     })
+//       .then((res) => res.json())
+//       .then((data: ChatRecentResponse) => {
+//         const [friends, conversations] = data.data;
+//         const groupsId = conversations.map((item) => item.id);
+//         socket.emit("join_groups", groupsId);
+//         setChatRecent([...friends, ...conversations]);
+//       })
+//       .catch((err) => console.error(err));
+//   }, []);
+
+//   const fetchLastMessage = () => {
+//     fetch(`http://localhost:8080/chats/getlastchats`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`,
+//       },
+//     })
+//       .then((response) => response.json())
+//       .then((data: LastChatsResponse) => {
+//         const [x, y] = data.data;
+//         setLastChatsId(x);
+//         setLastChatsObj(y);
+//       })
+//       .catch((err) => console.error(err));
+//   };
+
+//   useEffect(() => {
+//     const old = [...chatRecent];
+//     old.forEach((item) => {
+//       const index = lastChatsId.indexOf(item.id);
+//       if (lastChatsObj[index]) {
+//         item.msgTime = lastChatsObj[index].msgTime;
+//         item.content =
+//           lastChatsObj[index].from +
+//           ": " +
+//           lastChatsObj[index].content +
+//           ` (${item.msgTime})`;
+//       } else item.msgTime = "0";
+//     });
+//     old.sort(
+//       (a, b) =>
+//         new Date(b.msgTime ?? "0").getTime() -
+//         new Date(a.msgTime ?? "0").getTime()
+//     );
+//     setChatRecent([...old]);
+//   }, [lastChatsObj]);
+
+//   useEffect(() => {
+//     socket.on("loadLastMessage", (_msg: any) => {
+//       fetchLastMessage();
+//     });
+//     fetchLastMessage();
+//   }, []);
+
+//   useEffect(() => {
+//     socket.on("listOnline", (data: ListOnlineEvent) => {
+//       setListOnline(data.listOnline);
+//     });
+//   }, []);
+
+//   useEffect(() => {
+//     socket.on("typing", (data: TypingEvent) => {
+//       const index = userTyping.indexOf(data.otherId);
+//       if (index === -1) {
+//         const updatedTyping = [...userTyping, data.otherId];
+//         setUserTyping(updatedTyping);
+//         setTimeout(() => {
+//           const tmp = [...updatedTyping];
+//           const i = tmp.indexOf(data.otherId);
+//           if (i !== -1) {
+//             tmp.splice(i, 1);
+//             setUserTyping([...tmp]);
+//           }
+//         }, 3000);
+//       }
+//     });
+//   }, [userTyping]);
+
+//   const getLastMessage = (conversation: Conversation) => {
+//     if (conversation.messages && conversation.messages.length > 0) {
+//       const lastMessage =
+//         conversation.messages[conversation.messages.length - 1];
+//       const sender = conversation.participants.find(
+//         (p: Participant) => p.user_id === lastMessage.sender_id
+//       );
+//       const messageTime = new Date(lastMessage.created_at).toLocaleString(
+//         "en-US",
+//         {
+//           month: "short",
+//           day: "numeric",
+//           hour: "numeric",
+//           minute: "2-digit",
+//           hour12: true,
+//         }
+//       );
+//       return `${sender?.user.first_name}: ${lastMessage.content} (${messageTime})`;
+//     }
+//     return "No messages yet";
+//   };
+
+//   return (
+//     <div className="chat-recent" ref={itemRef}>
+//       <div
+//         className="recent-item current-recent example"
+//         onClick={onclick}
+//         data-id="all"
+//         key=""
+//       >
+//         <div className="item-wrap"></div>
+//       </div>
+//       {chatRecent.map((item, index) => (
+//         <div
+//           className="recent-item"
+//           onClick={onclick}
+//           data-id={item.id}
+//           key={index}
+//         >
+//           <div className="avatar">
+//             <img src={item.image} alt={item.name} />
+//           </div>
+//           {listOnline.includes(item.id) ? (
+//             <div
+//               className={
+//                 userTyping.includes(item.id)
+//                   ? "chat-status-online typing"
+//                   : "chat-status-online"
+//               }
+//             ></div>
+//           ) : (
+//             <div className="chat-status-offline"></div>
+//           )}
+//           <div className="item-wrap">
+//             <div className="chat-wrap">
+//               <div className="chat-name">{item.name}</div>
+//             </div>
+//             {userTyping.includes(item.id) ? (
+//               <div className="typing">
+//                 <i>This User Is Typing</i>
+//               </div>
+//             ) : (
+//               <div className="chat-content" data-id={item.id}>
+//                 <i>{item.content}</i>
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       ))}
+//     </div>
+//   );
+// }
+
+// export default ChatsRecent;
