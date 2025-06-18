@@ -13,7 +13,7 @@ export const appRoutes: RouteObject[] = [
     children: [
       {
         path: "",
-        element: <Navigate to="/home" replace />,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: "login",
@@ -25,7 +25,15 @@ export const appRoutes: RouteObject[] = [
       },
       {
         path: "home",
-        element: <Home />,
+        element: (
+          <ProtectedRoute>
+            <Home />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "*",
+        element: <Navigate to="/login" replace />,
       },
     ],
   },

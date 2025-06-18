@@ -11,6 +11,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import Success from "../Alert/Success";
 import "./Auth.scss";
 import Error from "../Alert/Error";
+import { useAuth } from "../../hook/AuthContext";
 
 interface FormData {
   email: string;
@@ -37,15 +38,20 @@ const Login: React.FC = () => {
     password: "",
   });
 
-  const [hasLogin, setHasLogin] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [alertTag, setAlertTag] = useState<React.ReactNode>();
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (username && sub) setHasLogin(true);
-    else setHasLogin(false);
-  }, []);
+    // Nếu đã đăng nhập, chuyển đến trang home
+    if (isAuthenticated) {
+      navigate("/home");
+    }
+  }, [isAuthenticated, navigate]);
 
   const submitForm = async (): Promise<void> => {
+    setIsLoading(true);
     try {
       const response = await fetch(`http://localhost:8080/auth/login`, {
         method: "POST",
@@ -55,14 +61,16 @@ const Login: React.FC = () => {
         body: JSON.stringify(formData),
       });
       
+      if (!response.ok) {
+        throw "Login failed";
+      }
+      
       const data: LoginResponse = await response.json();
       const { accessToken, user } = data.data;
       
-      document.cookie = `accessToken=${accessToken}`;
-      localStorage.setItem("user", JSON.stringify(user));
-      console.log(`access_token=${accessToken}`);
+      // Sử dụng login function từ AuthContext
+      login(accessToken, user);
       
-      setHasLogin(true);
       setAlertTag(
         <Success
           value={[
@@ -82,6 +90,8 @@ const Login: React.FC = () => {
       setTimeout(() => {
         setAlertTag("");
       }, 8000);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -99,40 +109,40 @@ const Login: React.FC = () => {
     <>
       <div className="login-page">
         {alertTag}
-        {!hasLogin ? (
-          <form onSubmit={handleFormSubmit} className="form-login">
-            <div className="submit_center">
-              <h2 className="title">Welcome To Talk Together</h2>
-            </div>
-            <label>User Email</label>
-            <input
-              type="text"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-            />
-            <label>Password</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-            />
-            <div className="submit_center">
-              <button type="submit">Login</button>
-            </div>
-            <div className="submit_center">
-              <NavLink to="/register" className={"register"}>
-                Touch me to register new account
-              </NavLink>
-            </div>
-            <div className="notice">
-              The server takes a few minutes to start up for the new day
-            </div>
-          </form>
-        ) : (
-          <>{(window.location.href = "/home")}</>
-        )}
+        <form onSubmit={handleFormSubmit} className="form-login">
+          <div className="submit_center">
+            <h2 className="title">Welcome To Talk Together</h2>
+          </div>
+          <label>User Email</label>
+          <input
+            type="text"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            disabled={isLoading}
+          />
+          <label>Password</label>
+          <input
+            type="password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            disabled={isLoading}
+          />
+          <div className="submit_center">
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? "Logging in..." : "Login"}
+            </button>
+          </div>
+          <div className="submit_center">
+            <NavLink to="/register" className={"register"}>
+              Touch me to register new account
+            </NavLink>
+          </div>
+          <div className="notice">
+            The server takes a few minutes to start up for the new day
+          </div>
+        </form>
       </div>
     </>
   );

@@ -1,6 +1,6 @@
 import { jwtDecode } from "jwt-decode";
 import React, { useEffect, useRef, useState } from "react";
-import { token } from "../../../store/tokenContext";
+import { token, decodeToken } from "../../../store/tokenContext";
 import user from "../../../store/accountContext";
 import { MessageDto } from "../ChatBox/ChatBox";
 import socketService from "../../../../socket/Socket";
@@ -19,6 +19,22 @@ export function InsertMessage({ props }: InsertMessageProps) {
   const [showDate, setShowDate] = useState<boolean>(false);
   const content = (msg.content || "").split(" ");
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Lấy user ID từ JWT token để đảm bảo tính nhất quán
+  const getCurrentUserId = () => {
+    try {
+      if (token) {
+        const decoded = jwtDecode(token);
+        return decoded?.sub || decoded?.id || user.id;
+      }
+      return user.id;
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return user.id;
+    }
+  };
+
+  const currentUserId = getCurrentUserId();
 
   const onMouse = () => {
     setShowOption(!showOption);
@@ -44,19 +60,19 @@ export function InsertMessage({ props }: InsertMessageProps) {
   return (
     <div
       className={
-        msg.user?.id === user.id ? "message-right" : "message-left"
+        msg.user?.id === currentUserId ? "message-right" : "message-left"
       }
     >
       <div className="transparent"></div>
       <div className="message-wrap">
-        {showOption && msg.user?.id === user.id && (
+        {showOption && msg.user?.id === currentUserId && (
           <div className="option-chat">
             <button onClick={isDelete}>D.Hard</button>
             <button onClick={() => setShowDate(!showDate)}>More</button>
           </div>
         )}
         <div className="wrap-option">
-          {msg.user?.id !== user.id && (
+          {msg.user?.id !== currentUserId && (
             <div className="user-coming">{msg.user?.firstName + " " + msg.user?.lastName}</div>
           )}
           <div className="user-content" onClick={onMouse}>
@@ -97,7 +113,7 @@ export function InsertMessage({ props }: InsertMessageProps) {
             </div>
           )}
         </div>
-        {showOption && msg.user?.id !== user.id && (
+        {showOption && msg.user?.id !== currentUserId && (
           <div className="option-chat">
             <button>Delete</button>
             <button onClick={() => setShowDate(!showDate)}>More</button>

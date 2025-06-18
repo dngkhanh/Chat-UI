@@ -29,10 +29,14 @@ import {
   FiPhone,
 } from "react-icons/fi";
 import "./ChatRecent.scss";
-import { token } from "../../../store/tokenContext";
+import { token, decodeToken } from "../../../store/tokenContext";
+import user from "../../../store/accountContext";
 import socketService from "../../../../socket/Socket";
 import { createPortal } from "react-dom";
 import { useConversation } from "../../../../hook/ConversationContext";
+import { useAuth } from "../../../../hook/AuthContext";
+import { jwtDecode } from "jwt-decode";
+import { FriendList } from '../FriendList/FriendList';
 
 export interface User {
   id: number;
@@ -203,6 +207,8 @@ const NewMessageMenu = ({
 
 export interface ChatRecentProps {
   onSelectChat: (chatId: string) => void;
+  onFriendSelect?: (friend: any, conversationId: string) => void;
+  onGroupMembersSelect?: (friends: any[], groupName: string, conversationId: string) => void;
   onLogout?: () => void;
   onCreateGroup?: () => void;
   onAddFriend?: () => void;
@@ -220,6 +226,7 @@ export interface ChatRecentProps {
 const ChatRecent: React.FC<ChatRecentProps> = (props) => {
   const socket: any = socketService;
   const context = useConversation();
+  const { logout } = useAuth();
 
   const [chatRecent, setChatRecent] = useState<ChatItem[]>([]);
   const [lastChatsId, setLastChatsId] = useState<string[]>([]);
@@ -252,6 +259,26 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
     name: "",
     avatar: "",
   });
+
+  // New Message and New Group states
+  const [showNewMessageView, setShowNewMessageView] = useState(false);
+  const [showNewGroupView, setShowNewGroupView] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<any>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Lấy user ID từ JWT token để đảm bảo tính nhất quán
+  const getCurrentUserId = () => {
+    try {
+      if (token) {
+        const decoded = jwtDecode(token) as any;
+        return decoded?.sub || decoded?.id || user.id;
+      }
+      return user.id;
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return user.id;
+    }
+  };
 
   // Fetch user info from API
   useEffect(() => {
@@ -316,18 +343,32 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
           // Kiểm tra xem data.data có phải là mảng không
           const conversations = Array.isArray(data.data) ? data.data : data.data.result || [];
           const formattedData: ChatItem[] = conversations.map((item: any) => {
-            // Lấy tên người dùng từ participants
-            let userName = '';
-            if (item.participants && item.participants.length > 0) {
-              const participant = item.participants[0].user;
-              if (participant) {
-                userName = `${participant.firstName || ''} ${participant.lastName || ''}`.trim();
+            const isGroup = item.participants && item.participants.length > 2;
+            let displayName = '';
+
+            if (isGroup) {
+              // Nếu là group, luôn lấy tên nhóm
+              displayName = item.title || 'Nhóm mới';
+            } else {
+              // Nếu là 1-1, lấy participant khác user hiện tại
+              let friend = null;
+              if (item.participants && item.participants.length > 1) {
+                friend = item.participants.find((p: any) => p.user && p.user.id !== getCurrentUserId());
+                if (!friend) {
+                  // Fallback: lấy participant đầu tiên có user
+                  friend = item.participants.find((p: any) => p.user);
+                }
+              }
+              if (friend && friend.user) {
+                displayName = `${friend.user.firstName || ''} ${friend.user.lastName || ''}`.trim();
+              } else {
+                displayName = item.title || 'Unknown User';
               }
             }
 
             return {
               id: item.id.toString(),
-              name: item.title || userName || 'Unknown User',
+              name: displayName,
               image: item.avatarUrl || item.avatar || 'https://i.pravatar.cc/150?img=1',
               content: item.lastMessage?.content || '',
               msgTime: item.lastMessage?.createdAt || item.updatedAt || '',
@@ -343,7 +384,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
         setError('Failed to load conversations');
         setIsLoading(false);
       });
-  }, []);
+  }, [refreshTrigger]);
 
   const fetchLastMessage = async () => {
     try {
@@ -482,6 +523,145 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
     setIsNewMessageMenuOpen(!isNewMessageMenuOpen);
   };
 
+  const handleNewMessage = () => {
+    setShowNewMessageView(true);
+    setIsNewMessageMenuOpen(false);
+  };
+
+  const handleNewGroup = () => {
+    setShowNewGroupView(true);
+    setIsNewMessageMenuOpen(false);
+  };
+
+  const handleBackToChatRecent = () => {
+    setShowNewMessageView(false);
+    setShowNewGroupView(false);
+    setSelectedFriend(null);
+  };
+
+  const handleFriendSelect = async (friend: any) => {
+    setSelectedFriend(friend);
+    
+    try {
+      // Trước tiên, kiểm tra xem có conversation 1-1 đã tồn tại không
+      const checkResponse = await fetch('http://localhost:8080/conversations', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (checkResponse.ok) {
+        const conversationsData = await checkResponse.json();
+        if (conversationsData.statusCode === 200) {
+          const conversations = Array.isArray(conversationsData.data) ? conversationsData.data : conversationsData.data.result || [];
+          
+          // Tìm conversation 1-1 với bạn bè này
+          const existingConversation = conversations.find((conv: any) => {
+            return conv.participants && conv.participants.length === 2 && 
+                   conv.participants.some((p: any) => p.user && p.user.id === friend.id);
+          });
+
+          if (existingConversation) {
+            // Nếu đã có conversation, sử dụng conversation đó
+            const conversationId = existingConversation.id.toString();
+            
+            if (props.onFriendSelect) {
+              props.onFriendSelect(friend, conversationId);
+            }
+            
+            props.onSelectChat(conversationId);
+            handleBackToChatRecent();
+            return;
+          }
+        }
+      }
+
+      // Nếu không có conversation, tạo mới
+      const response = await fetch('http://localhost:8080/conversations/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: `${friend.firstName} ${friend.lastName}`,
+          participants: [
+            {
+              userId: friend.id,
+              type: 'MEMBER'
+            }
+          ]
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.statusCode === 201) {
+        const conversationId = data.data.id.toString();
+        
+        // Gọi prop onFriendSelect để truyền thông tin bạn bè và conversationId
+        if (props.onFriendSelect) {
+          props.onFriendSelect(friend, conversationId);
+        }
+        
+        // Trigger refresh conversations list
+        setRefreshTrigger(prev => prev + 1);
+        
+        // Chọn conversation mới tạo
+        props.onSelectChat(conversationId);
+        handleBackToChatRecent();
+      } else {
+        console.error('Error creating conversation:', data);
+      }
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+    }
+  };
+
+  // Thêm hàm xử lý khi chọn thành viên cho group
+  const handleGroupMembersSelect = async (friends: any[], groupName: string) => {
+    try {
+      // Tạo group conversation với nhiều thành viên
+      const response = await fetch('http://localhost:8080/conversations/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: groupName,
+          participants: friends.map(friend => ({
+            userId: friend.id,
+            type: 'MEMBER'
+          }))
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.statusCode === 201) {
+        const conversationId = data.data.id.toString();
+        
+        // Gọi prop onGroupMembersSelect để truyền thông tin thành viên và conversationId
+        if (props.onGroupMembersSelect) {
+          props.onGroupMembersSelect(friends, groupName, conversationId);
+        }
+        
+        // Trigger refresh conversations list
+        setRefreshTrigger(prev => prev + 1);
+        
+        // Chọn conversation mới tạo
+        props.onSelectChat(conversationId);
+        handleBackToChatRecent();
+      } else {
+        console.error('Error creating group conversation:', data);
+      }
+    } catch (error) {
+      console.error('Error creating group conversation:', error);
+    }
+  };
+
   const handleSettingsClick = () => {
     setShowSettings(true);
     setIsDropdownOpen(false);
@@ -515,14 +695,7 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
   };
 
   const handleLogout = () => {
-    // Xóa token
-    localStorage.removeItem('token');
-    // Xóa thông tin user
-    localStorage.removeItem('user');
-    // Đóng dropdown menu
-    setIsDropdownOpen(false);
-    // Chuyển về trang login
-    window.location.href = '/login';
+    logout();
   };
 
   const formatTime = (dateString: string) => {
@@ -549,6 +722,33 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
     // Nếu khác năm
     return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
+
+  // New Message View
+  if (showNewMessageView) {
+    return (
+      <div className="chat-recent new-message-view">
+        <FriendList 
+          onBack={handleBackToChatRecent}
+          onFriendSelect={handleFriendSelect}
+          isNewMessageMode={true}
+        />
+      </div>
+    );
+  }
+
+  // New Group View
+  if (showNewGroupView) {
+    return (
+      <div className="chat-recent new-group-view">
+        <FriendList 
+          onBack={handleBackToChatRecent}
+          onGroupMembersSelect={handleGroupMembersSelect}
+          isNewGroupMode={true}
+          minGroupMembers={3}
+        />
+      </div>
+    );
+  }
 
   if (showEditProfile) {
     return (
@@ -997,20 +1197,14 @@ const ChatRecent: React.FC<ChatRecentProps> = (props) => {
           <div className="menu-items">
             <button
               className="menu-item"
-              onClick={() => {
-                console.log("New message clicked");
-                setIsNewMessageMenuOpen(false);
-              }}
+              onClick={handleNewMessage}
             >
               <FiUser className="menu-icon" />
               <span>New Message</span>
             </button>
             <button
               className="menu-item"
-              onClick={() => {
-                props.onCreateGroup && props.onCreateGroup();
-                setIsNewMessageMenuOpen(false);
-              }}
+              onClick={handleNewGroup}
             >
               <FiUsers className="menu-icon" />
               <span>New Group</span>

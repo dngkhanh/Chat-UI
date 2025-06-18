@@ -209,46 +209,6 @@ export function ChatsRecent() {
   const itemRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Dữ liệu mẫu cho danh sách chat
-  const sampleChats = [
-    {
-      id: 1,
-      name: "John Doe",
-      avatar: "https://i.pravatar.cc/150?img=1",
-      type: ConversationType.FRIEND,
-      lastMessage: "Hey, how are you doing?",
-      lastMessageTime: "12:30",
-      unreadCount: 2
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      avatar: "https://i.pravatar.cc/150?img=2",
-      type: ConversationType.FRIEND,
-      lastMessage: "See you tomorrow!",
-      lastMessageTime: "11:45",
-      unreadCount: 0
-    },
-    {
-      id: 3,
-      name: "Mike Johnson",
-      avatar: "https://i.pravatar.cc/150?img=3",
-      type: ConversationType.FRIEND,
-      lastMessage: "The meeting is scheduled for 2 PM",
-      lastMessageTime: "10:15",
-      unreadCount: 1
-    },
-    {
-      id: 4,
-      name: "Project Team",
-      avatar: "https://i.pravatar.cc/150?img=4",
-      type: ConversationType.GROUP,
-      lastMessage: "Sarah: I've updated the design",
-      lastMessageTime: "09:30",
-      unreadCount: 3
-    }
-  ];
-
   useEffect(() => {
     socket.on("timerEvent", () => {
       setIsLoading(!isLoading);
@@ -700,24 +660,22 @@ export function ChatsRecent() {
 
   return (
     <div className="chat-list">
-      {sampleChats.map((chat) => (
+      {chatRecent.map((chat) => (
         <div
           key={chat.id}
           className={`chat-item ${selectedChat?.id === chat.id ? 'active' : ''}`}
           onClick={() => setSelectedChat(chat)}
         >
           <div className="avatar">
-            <img src={chat.avatar} alt={chat.name} />
+            <img src={chat.image} alt={chat.name} />
           </div>
           <div className="chat-info">
             <div className="name">{chat.name}</div>
-            <div className="last-message">{chat.lastMessage}</div>
+            <div className="last-message">{chat.content}</div>
           </div>
           <div className="chat-meta">
-            <div className="time">{chat.lastMessageTime}</div>
-            {chat.unreadCount > 0 && (
-              <div className="unread">{chat.unreadCount}</div>
-            )}
+            <div className="time">{chat.msgTime}</div>
+            {/* Nếu muốn hiển thị số tin nhắn chưa đọc, cần bổ sung trường unreadCount vào dữ liệu thực tế */}
           </div>
         </div>
       ))}

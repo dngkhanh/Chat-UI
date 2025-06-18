@@ -3,7 +3,7 @@ import ChatRecent from "./ChatRecent/ChatRecent";
 import "./ChatPage.scss";
 import { ChatBox } from "./ChatBox/ChatBox";
 import ChatInfo from "./ChatInfo/ChatInfo";
-import { FiMoreVertical, FiSearch, FiPhone, FiVideo } from 'react-icons/fi';
+import { FiMoreVertical, FiSearch, FiPhone, FiVideo, FiMessageCircle } from 'react-icons/fi';
 import { MessageType, CallType, ConversationType, ConversationVm } from "./ChatBox/ChatBox";
 import VideoCall from "../Call/Call";
 import { useNavigate } from 'react-router-dom';
@@ -14,20 +14,21 @@ import { getConversationById } from "../../../api/Chat.api";
 
 // Component con để xử lý logic với context
 function ChatContent() {
-  const [selectedChat, setSelectedChat] = useState<any>({
-    id: 1,
-    name: "John Doe",
-    avatar: "https://i.pravatar.cc/150?img=1",
-    type: "FRIEND"
-  });
+  const [selectedChat, setSelectedChat] = useState<{
+    id: number;
+    name: string;
+    avatar: string;
+    type: string;
+  } | null>(null);
   const [isChatInfoOpen, setIsChatInfoOpen] = useState(false);
   const [isVideoCall, setIsVideoCall] = useState(false);
   const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
   const headerDropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [showFriendList, setShowFriendList] = useState(false);
-  const [conversationInfo, setConversationInfo] = useState<ConversationVm | null>(null);
+  const [conversationInfo, setConversationInfo] = useState<any>(null);
   const { setConversationId, setIsShowRecent } = useConversation();
+  const [selectedFriend, setSelectedFriend] = useState<any>(null);
 
   const [userInfo, setUserInfo] = useState({
     name: "Nguyễn Văn A",
@@ -125,6 +126,50 @@ function ChatContent() {
     setShowFriendList(false);
   };
 
+  // Thêm hàm xử lý khi chọn bạn bè để tạo conversation mới
+  const handleFriendSelect = async (friend: any, conversationId: string) => {
+    setSelectedFriend(friend);
+    
+    // Cập nhật selectedChat với thông tin bạn bè được chọn
+    setSelectedChat({
+      id: parseInt(conversationId),
+      name: `${friend.firstName} ${friend.lastName}`,
+      avatar: friend.avatarUrl || friend.avatar || "https://i.pravatar.cc/150?img=1",
+      type: "FRIEND"
+    });
+    
+    // Fetch thông tin conversation mới tạo
+    try {
+      const conversationData = await getConversationById(parseInt(conversationId));
+      if (conversationData && conversationData.data) {
+        setConversationInfo(conversationData.data);
+      }
+    } catch (error) {
+      console.error('Error fetching new conversation info:', error);
+    }
+  };
+
+  // Thêm hàm xử lý khi chọn thành viên cho group
+  const handleGroupMembersSelect = async (friends: any[], conversationId: string) => {
+    // Cập nhật selectedChat với thông tin group
+    setSelectedChat({
+      id: parseInt(conversationId),
+      name: `Nhóm ${friends.length + 1} người`,
+      avatar: "https://i.pravatar.cc/150?img=1", // Avatar mặc định cho group
+      type: "GROUP"
+    });
+    
+    // Fetch thông tin conversation mới tạo
+    try {
+      const conversationData = await getConversationById(parseInt(conversationId));
+      if (conversationData && conversationData.data) {
+        setConversationInfo(conversationData.data);
+      }
+    } catch (error) {
+      console.error('Error fetching new group conversation info:', error);
+    }
+  };
+
   const handleMyStories = () => {
     console.log('My Stories clicked');
     setIsHeaderDropdownOpen(false);
@@ -157,6 +202,8 @@ function ChatContent() {
           <ChatRecent 
             userInfo={userInfo}
             onSelectChat={handleSelectChat}
+            onFriendSelect={handleFriendSelect}
+            onGroupMembersSelect={handleGroupMembersSelect}
             onLogout={() => {
               console.log('Logout clicked');
               // Add your logout logic here
@@ -200,31 +247,31 @@ function ChatContent() {
           <div 
             className="chat-info"
             onClick={handleOpenChatInfo}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: selectedChat ? 'pointer' : 'default' }}
           >
             <div className="avatar">
-              <img src={selectedChat?.avatar} alt="avatar" />
+              <img src={selectedChat?.avatar || "https://i.pravatar.cc/150?img=1"} alt="avatar" />
             </div>
             <div className="info">
-              <div className="name">{selectedChat?.name}</div>
-              <div className="status">Online</div>
+              <div className="name">{selectedChat?.name || "Chọn một cuộc trò chuyện"}</div>
+              <div className="status">{selectedChat ? "Online" : ""}</div>
             </div>
           </div>
           <div className="actions">
-            <button onClick={handleSearch}>
+            <button onClick={handleSearch} disabled={!selectedChat}>
               <FiSearch />
             </button>
-            <button onClick={handleVoiceCall}>
+            <button onClick={handleVoiceCall} disabled={!selectedChat}>
               <FiPhone />
             </button>
-            <button onClick={handleVideoCall}>
+            <button onClick={handleVideoCall} disabled={!selectedChat}>
               <FiVideo />
             </button>
             <div className="more-options-header" ref={headerDropdownRef}>
-              <button onClick={handleToggleHeaderDropdown}>
+              <button onClick={handleToggleHeaderDropdown} disabled={!selectedChat}>
                 <FiMoreVertical />
               </button>
-              {isHeaderDropdownOpen && (
+              {isHeaderDropdownOpen && selectedChat && (
                 <div className="dropdown-menu-header">
                   <ul>
                     <li onClick={handleOpenChatInfo}>Xem thông tin chat</li>
@@ -237,13 +284,25 @@ function ChatContent() {
           </div>
         </div>
         <div className="messages-container">
-          <ChatBox />
+          {selectedChat ? (
+            <ChatBox />
+          ) : (
+            <div className="no-chat-selected">
+              <div className="no-chat-content">
+                <div className="no-chat-icon">
+                  <FiMessageCircle size={64} />
+                </div>
+                <h3>Chào mừng bạn đến với Chat</h3>
+                <p>Chọn một cuộc trò chuyện để bắt đầu nhắn tin</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <ChatInfo 
         isOpen={isChatInfoOpen}
         onClose={() => setIsChatInfoOpen(false)}
-        chatInfo={selectedChat}
+        chatInfo={selectedChat || undefined}
       />
       {isVideoCall && (
         <VideoCall onClose={() => setIsVideoCall(false)} />

@@ -23,6 +23,30 @@ const ChatInfo: React.FC<ChatInfoProps> = ({ isOpen, onClose, chatInfo }) => {
 
   if (!isOpen) return null;
 
+  // Nếu không có chatInfo, hiển thị placeholder
+  if (!chatInfo) {
+    return (
+      <div className="chat-info">
+        <div className="chat-info__header">
+          <button onClick={onClose} className="chat-info__close-button">
+            <FiX />
+          </button>
+          <h3>Thông tin chat</h3>
+        </div>
+        
+        <div className="chat-info__content">
+          <div className="chat-info__placeholder">
+            <div className="chat-info__avatar">
+              <img src="https://i.pravatar.cc/150?img=1" alt="placeholder" />
+            </div>
+            <h4>Chưa chọn cuộc trò chuyện</h4>
+            <p>Vui lòng chọn một cuộc trò chuyện để xem thông tin</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleNotificationToggle = () => {
     setNotificationsEnabled(prev => !prev);
     console.log("Notifications toggled to:", !notificationsEnabled);

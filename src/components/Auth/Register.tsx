@@ -45,6 +45,7 @@ const Register: React.FC = () => {
   });
 
   const [alertTag, setAlertTag] = useState<React.ReactNode>();
+  const navigate = useNavigate();
 
   const submitForm = async (): Promise<void> => {
     try {
@@ -66,7 +67,7 @@ const Register: React.FC = () => {
         );
         setTimeout(() => {
           setAlertTag("");
-          window.location.href = "/login";
+          navigate("/login");
         }, 3000);
       } else {
         setAlertTag(<Error value={[`Register Fail`, data.message]} />);

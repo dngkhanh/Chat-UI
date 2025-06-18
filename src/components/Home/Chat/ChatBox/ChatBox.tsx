@@ -190,27 +190,44 @@ const getOtherInfo = (
   }
 
   // For friend conversation, find the other participant
-  const otherParticipant = conversation.participants?.find(
-    (p) => p.userId !== currentUserId
-  );
-
-  if (conversation.participants && conversation.participants?.length <= 2) {
+  if (conversation.participants && conversation.participants.length === 2) {
+    // Lấy participant khác current user
+    let friend = conversation.participants.find(p => p.userId !== currentUserId);
+    // Nếu không tìm thấy (dữ liệu lỗi), fallback về participant đầu tiên
+    if (!friend) {
+      friend = conversation.participants[0];
+    }
     return {
-      name: otherParticipant
-        ? `Friend: ${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`
+      name: friend
+        ? `${friend.user.firstName} ${friend.user.lastName}`
         : "Unknown",
-      image: otherParticipant?.user.avatarUrl || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRI9lRck6miglY0SZF_BZ_sK829yiNskgYRUg&s',
+      image: friend?.user.avatarUrl || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRI9lRck6miglY0SZF_BZ_sK829yiNskgYRUg&s',
       type: ConversationType.FRIEND,
       participants: conversation.participants,
-      phoneNumber: "+84706702785", // Placeholder for phone number
-      email: otherParticipant?.user.email, // Get email from other participant
+      phoneNumber: undefined,
+      email: friend?.user.email,
+    };
+  }
+
+  // Nếu chỉ có 1 participant (trường hợp bất thường)
+  if (conversation.participants && conversation.participants.length === 1) {
+    const friend = conversation.participants[0];
+    return {
+      name: friend
+        ? `${friend.user.firstName} ${friend.user.lastName}`
+        : "Unknown",
+      image: friend?.user.avatarUrl || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRI9lRck6miglY0SZF_BZ_sK829yiNskgYRUg&s',
+      type: ConversationType.FRIEND,
+      participants: conversation.participants,
+      phoneNumber: undefined,
+      email: friend?.user.email,
     };
   }
 
   return {
     name: "Group: " + conversation.title,
     image:
-      otherParticipant?.user.avatarUrl ||
+      conversation.participants && conversation.participants[0]?.user.avatarUrl ||
       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRg2EeQe-qNJinTWuKmUVZwpQnXkt6DudNoBQ&s",
     type: ConversationType.GROUP,
     participants: conversation.participants,

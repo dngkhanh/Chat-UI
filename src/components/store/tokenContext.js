@@ -11,7 +11,18 @@ const getCookie = (cookieName) => {
   return '';
 }
 
-export const token = getCookie('accessToken') || '';
+// Lấy token từ localStorage hoặc cookie
+const getToken = () => {
+  return localStorage.getItem('accessToken') || getCookie('accessToken') || '';
+}
+
+export let token = getToken();
+
+// Function để cập nhật token
+export const updateToken = (newToken) => {
+  token = newToken;
+  return token;
+}
 
 const validate = () => {
   try {
